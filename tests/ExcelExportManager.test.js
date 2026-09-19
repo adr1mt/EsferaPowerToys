@@ -12,6 +12,7 @@ describe('ExcelExportManager', () => {
     let clickedDownload;
     let dataProvider;
     let workbookBuilder;
+    let notifier;
 
     beforeEach(() => {
         dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
@@ -51,7 +52,19 @@ describe('ExcelExportManager', () => {
                 },
             })),
         };
-        manager = new ExcelExportManager(new PowerToysLogger(false), dataProvider, workbookBuilder);
+        notifier = {
+            error: jest.fn(),
+            warn: jest.fn(),
+            info: jest.fn(),
+            avisaIncidències: jest.fn(),
+        };
+        manager = new ExcelExportManager(
+            new PowerToysLogger(false),
+            dataProvider,
+            workbookBuilder,
+            undefined,
+            notifier,
+        );
     });
 
     afterEach(() => {
@@ -110,5 +123,43 @@ describe('ExcelExportManager', () => {
 
         expect(workbookBuilder.construeixWorkbookNotes).not.toHaveBeenCalled();
         expect(workbookBuilder.construeixWorkbookTotesLesAvaluacions).toHaveBeenCalledWith(notesAlumnes, 3);
+    });
+
+    test('hauria d’aturar-se sense descarregar res quan no hi ha dades', async () => {
+        dataProvider.obtéDadesExportació.mockResolvedValue(null);
+
+        await manager.procésDescàrregaExcel(1);
+
+        expect(workbookBuilder.construeixWorkbookNotes).not.toHaveBeenCalled();
+        expect(clickedDownload).toBeNull();
+    });
+
+    test('hauria d’avisar de les incidències abans de descarregar', async () => {
+        const notesAlumnes = [{ idAlumne: '1', nom: 'Alumna', continguts: {} }];
+        const incidències = [{ nom: 'Pau', motiu: 'error en la petició' }];
+        dataProvider.obtéDadesExportació.mockResolvedValue({ notesAlumnes, nomGrup: 'Grup Test', incidències });
+
+        await manager.procésDescàrregaExcel(1);
+
+        expect(notifier.avisaIncidències).toHaveBeenCalledWith(incidències, 'Exportació a Excel');
+        expect(clickedDownload).not.toBeNull();
+    });
+
+    test('hauria de notificar l’error quan la generació del workbook peta', async () => {
+        dataProvider.obtéDadesExportació.mockResolvedValue({
+            notesAlumnes: [{ idAlumne: '1', nom: 'Alumna', continguts: {} }],
+            nomGrup: 'Grup Test',
+            incidències: [],
+        });
+        workbookBuilder.construeixWorkbookNotes.mockImplementation(() => {
+            throw new Error('exceljs no carregat');
+        });
+
+        await manager.procésDescàrregaExcel(1);
+
+        expect(notifier.error).toHaveBeenCalledWith(
+            expect.stringContaining('exceljs no carregat'),
+            expect.any(Error),
+        );
     });
 });

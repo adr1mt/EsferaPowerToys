@@ -45,4 +45,62 @@ describe('VisualitzadorManager', () => {
         expect(modelBuilder.construeixModel).toHaveBeenCalledWith(notesAlumnes, 2, 0);
         expect(modal.open).toHaveBeenCalledWith([{ id: '1' }], 'Visualitzant: Avaluació 2');
     });
+
+    test('hauria d’aturar-se sense obrir el modal quan no hi ha dades', async () => {
+        const dataProvider = {
+            obtéDadesExportació: jest.fn().mockResolvedValue(null),
+            obtéMaxAvaluacions: jest.fn(),
+        };
+        const modelBuilder = { construeixModel: jest.fn() };
+        const modal = { open: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), avisaIncidències: jest.fn() };
+        const manager = new VisualitzadorManager(
+            { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
+        );
+
+        await manager.obreVisualitzador(1);
+
+        expect(modal.open).not.toHaveBeenCalled();
+        expect(modelBuilder.construeixModel).not.toHaveBeenCalled();
+    });
+
+    test('hauria d’avisar de les incidències en obrir el visualitzador', async () => {
+        const notesAlumnes = [{ idAlumne: '1', nom: 'Alumna', continguts: {} }];
+        const incidències = [{ nom: 'Anna', motiu: 'sense dades' }];
+        const dataProvider = {
+            obtéDadesExportació: jest.fn().mockResolvedValue({ notesAlumnes, incidències }),
+            obtéMaxAvaluacions: jest.fn(),
+        };
+        const modelBuilder = { construeixModel: jest.fn(() => ({ students: [{ id: '1' }] })) };
+        const modal = { open: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), avisaIncidències: jest.fn() };
+        const manager = new VisualitzadorManager(
+            { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
+        );
+
+        await manager.obreVisualitzador(2);
+
+        expect(notifier.avisaIncidències).toHaveBeenCalledWith(incidències, 'Visualitzador');
+        expect(modal.open).toHaveBeenCalled();
+    });
+
+    test('hauria de notificar l’error quan el modal peta', async () => {
+        const dataProvider = {
+            obtéDadesExportació: jest.fn().mockResolvedValue({ notesAlumnes: [], incidències: [] }),
+            obtéMaxAvaluacions: jest.fn(),
+        };
+        const modelBuilder = { construeixModel: jest.fn(() => ({ students: [] })) };
+        const modal = { open: jest.fn(() => { throw new Error('modal trencat'); }) };
+        const notifier = { error: jest.fn(), warn: jest.fn(), avisaIncidències: jest.fn() };
+        const manager = new VisualitzadorManager(
+            { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
+        );
+
+        await manager.obreVisualitzador(1);
+
+        expect(notifier.error).toHaveBeenCalledWith(
+            expect.stringContaining('modal trencat'),
+            expect.any(Error),
+        );
+    });
 });

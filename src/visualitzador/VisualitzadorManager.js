@@ -1,15 +1,24 @@
 import { NotesAggregationHelper } from '../dataProviders/NotesAggregationHelper.js';
+import { Notifier } from '../Notifier.js';
 
 /**
  * Coordina l'obtenció de dades i l'obertura del visualitzador.
  */
 export class VisualitzadorManager {
-    constructor(logger, dataProvider, modelBuilder, modal, notesAggregationHelper = new NotesAggregationHelper()) {
+    constructor(
+        logger,
+        dataProvider,
+        modelBuilder,
+        modal,
+        notesAggregationHelper = new NotesAggregationHelper(),
+        notifier = new Notifier(logger),
+    ) {
         this.logger = logger;
         this.dataProvider = dataProvider;
         this.modelBuilder = modelBuilder;
         this.modal = modal;
         this.notesAggregationHelper = notesAggregationHelper;
+        this.notifier = notifier;
     }
 
     /**
@@ -23,6 +32,8 @@ export class VisualitzadorManager {
             const dadesExportació = await this.dataProvider.obtéDadesExportació();
             if (!dadesExportació) return;
 
+            this.notifier.avisaIncidències(dadesExportació.incidències, 'Visualitzador');
+
             const isAgregat = this.notesAggregationHelper.ésModeAgregació(evaluation);
             const maxAvaluacions = isAgregat ? await this.dataProvider.obtéMaxAvaluacions() : 0;
             const model = this.modelBuilder.construeixModel(
@@ -32,7 +43,7 @@ export class VisualitzadorManager {
             );
             this.modal.open(model.students, this.obtéTextContextVisualització(evaluation, isAgregat));
         } catch (error) {
-            this.logger.error('Error crític a VisualitzadorManager:', error);
+            this.notifier.error(`No s'ha pogut obrir el visualitzador: ${error.message}`, error);
         }
     }
 

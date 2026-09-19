@@ -22,6 +22,7 @@ import { VisualitzadorModal } from './visualitzador/VisualitzadorModal.js';
 import { PopulationDataProvider } from './dataProviders/PopulationDataProvider.js';
 import { PopulationUIBuilder } from './population/PopulationUIBuilder.js';
 import { PopulationFeatureManager } from './population/PopulationFeatureManager.js';
+import { Notifier } from './Notifier.js';
 /**
  * Classe principal que coordina les funcionalitats d'Esfer@ PowerToys.
  */
@@ -32,7 +33,11 @@ export class PowerToysController {
      */
     constructor() {
         /** @type {PowerToysLogger} */
-        this.logger = new PowerToysLogger(true); // DEBUG activat
+        // Activa'l des de la consola amb: PowerToysController.logger.setDebug(true)
+        this.logger = new PowerToysLogger(false);
+
+        /** @type {Notifier} */
+        this.notifier = new Notifier(this.logger);
 
         /** @type {MateriaParser} */
         this.parser = new MateriaParser(this.logger);
@@ -63,13 +68,15 @@ export class PowerToysController {
         /** @type {ExcelStyleManager} */
         this.excelStyleManager = new ExcelStyleManager(this.logger);
 
-        const notesDataProvider = new NotesDataProvider(this.logger);
+        const notesDataProvider = new NotesDataProvider(this.logger, undefined, this.notifier);
 
         /** @type {ExcelExportManager} */
         this.excelExportManager = new ExcelExportManager(
             this.logger,
             notesDataProvider,
             new ExcelNotesWorkbookBuilder(),
+            undefined,
+            this.notifier,
         );
 
         const visualitzadorModelBuilder = new VisualitzadorModelBuilder();
@@ -84,6 +91,8 @@ export class PowerToysController {
                 new VisualitzadorRenderer(visualitzadorModelBuilder),
                 new VisualitzadorPdfExporter(),
             ),
+            undefined,
+            this.notifier,
         );
 
         /** @type {ExcelUIBuilder} */

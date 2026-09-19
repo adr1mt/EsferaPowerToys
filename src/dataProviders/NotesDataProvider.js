@@ -1,4 +1,8 @@
 import { NotesMapper } from './NotesMapper.js';
+import { Notifier } from '../Notifier.js';
+
+/** Nombre d'avaluacions que s'assumeix quan Esfer@ no el retorna. */
+const MAX_AVALUACIONS_PER_DEFECTE = 4;
 
 /**
  * Obté les dades de notes exposades pels serveis Angular d'Esfer@.
@@ -7,10 +11,12 @@ export class NotesDataProvider {
     /**
      * @param {import('../PowerToysLogger.js').PowerToysLogger} logger
      * @param {NotesMapper} mapper
+     * @param {Notifier} notifier
      */
-    constructor(logger, mapper = new NotesMapper()) {
+    constructor(logger, mapper = new NotesMapper(), notifier = new Notifier(logger)) {
         this.logger = logger;
         this.mapper = mapper;
+        this.notifier = notifier;
     }
 
     /**
@@ -20,14 +26,16 @@ export class NotesDataProvider {
     async obtéDadesExportació() {
         const idGrup = this.extractIdGrup();
         if (idGrup === null) {
-            this.logger.error("NotesDataProvider → No s'ha pogut extreure idGrup");
+            this.notifier.error(
+                "No s'ha pogut identificar el grup a partir de l'adreça. Obre la pàgina del grup des d'Esfer@ i torna-ho a provar.",
+            );
             return null;
         }
 
         const injector = this.obtéInjectorAngular();
         if (!injector) {
-            this.logger.error(
-                "NotesDataProvider → No s'ha pogut obtenir l'injector. Potser Angular no està bootstrapat encara.",
+            this.notifier.error(
+                "Esfer@ encara no ha acabat de carregar-se. Espera que la pàgina estigui llesta i torna-ho a provar.",
             );
             return null;
         }
@@ -37,7 +45,7 @@ export class NotesDataProvider {
         var matricules = await this.extractIdMatricula(factory, idGrup, injector);
 
         if (!matricules || matricules.length === 0) {
-            this.logger.error('NotesDataProvider → No hi ha matricules per recuperar');
+            this.notifier.error("No s'ha pogut obtenir la llista d'alumnes del grup.");
             return null;
         }
 
@@ -51,6 +59,7 @@ export class NotesDataProvider {
         return {
             notesAlumnes,
             nomGrup: matricules[0].nomGrup,
+            incidències: this.recullIncidències(notesAlumnes),
         };
     }
 
@@ -81,7 +90,7 @@ export class NotesDataProvider {
      */
     async obtéMaxAvaluacions() {
         const idGrup = this.extractIdGrup();
-        if (!idGrup) return 4;
+        if (!idGrup) return MAX_AVALUACIONS_PER_DEFECTE;
 
         const isParcial = window.location.pathname.includes("parcialAvaluacioGrupAlumne");
         const type = isParcial ? 'parcial' : 'final';
@@ -104,12 +113,12 @@ export class NotesDataProvider {
 
         try {
             const injector = this.obtéInjectorAngular();
-            if (!injector) return 4;
+            if (!injector) return MAX_AVALUACIONS_PER_DEFECTE;
 
             const factory = this.obtéAvaluacioFactory(injector);
 
             const matricules = await this.extractIdMatricula(factory, idGrup, injector);
-            if (!matricules || matricules.length === 0) return 4;
+            if (!matricules || matricules.length === 0) return MAX_AVALUACIONS_PER_DEFECTE;
 
             const primerAlumne = matricules[0];
             const data = await this.fetchAvaluacioData(factory, primerAlumne.idMatricula, idGrup);
@@ -121,10 +130,13 @@ export class NotesDataProvider {
                 return maxAvaluacions;
             }
         } catch (error) {
+            this.notifier.warn(
+                `No s'ha pogut determinar el nombre d'avaluacions del grup; se'n mostren ${MAX_AVALUACIONS_PER_DEFECTE} per defecte.`,
+            );
             this.logger.error('NotesDataProvider → Error obtenint maxAvaluacions:', error);
         }
-        
-        return 4;
+
+        return MAX_AVALUACIONS_PER_DEFECTE;
     }
 
     /**
@@ -222,7 +234,22 @@ export class NotesDataProvider {
         })
         .catch((err) => {
             this.logger.error(`NotesDataProvider → ERROR EN LA PETICIÓ (${isParcial ? 'PARCIAL' : 'FINAL'}):`, err);
+            throw err;
         });
+    }
+
+    /**
+     * Recull els alumnes que no s'han pogut carregar perquè es puguin comunicar.
+     * @param {Array<Object>} notesAlumnes
+     * @returns {Array<{nom: string, motiu: string}>}
+     */
+    recullIncidències(notesAlumnes) {
+        return (notesAlumnes || [])
+            .filter((alumne) => !alumne || alumne.skipped || alumne.error || !alumne.success)
+            .map((alumne) => ({
+                nom: alumne?.nom ?? '(sense nom)',
+                motiu: alumne?.error ? 'error en la petició' : 'sense dades',
+            }));
     }
 
     /**
@@ -267,7 +294,7 @@ export class NotesDataProvider {
                         try {
                             results[i] = await task();
                         } catch (err) {
-                            results[i] = err;
+                            results[i] = { error: true, err };
                         } finally {
                             activeCount--;
                             next();

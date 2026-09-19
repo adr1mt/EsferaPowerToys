@@ -1,4 +1,5 @@
 import { NotesAggregationHelper } from '../dataProviders/NotesAggregationHelper.js';
+import { Notifier } from '../Notifier.js';
 
 /**
  * Coordina l'obtenció de dades, la construcció del workbook i la descàrrega XLSX.
@@ -9,11 +10,18 @@ export class ExcelExportManager {
      * @param {import('../dataProviders/NotesDataProvider.js').NotesDataProvider} dataProvider
      * @param {import('./ExcelNotesWorkbookBuilder.js').ExcelNotesWorkbookBuilder} workbookBuilder
      */
-    constructor(logger, dataProvider, workbookBuilder, notesAggregationHelper = new NotesAggregationHelper()) {
+    constructor(
+        logger,
+        dataProvider,
+        workbookBuilder,
+        notesAggregationHelper = new NotesAggregationHelper(),
+        notifier = new Notifier(logger),
+    ) {
         this.logger = logger;
         this.dataProvider = dataProvider;
         this.workbookBuilder = workbookBuilder;
         this.notesAggregationHelper = notesAggregationHelper;
+        this.notifier = notifier;
     }
 
     /**
@@ -33,9 +41,11 @@ export class ExcelExportManager {
             const dadesExportació = await this.dataProvider.obtéDadesExportació();
             if (!dadesExportació) return;
 
+            this.notifier.avisaIncidències(dadesExportació.incidències, "Exportació a Excel");
+
             await this.descarregaXLSX(dadesExportació.notesAlumnes, evaluation, dadesExportació.nomGrup);
         } catch (error) {
-            this.logger.error('Error crític a ExcelExportManager:', error);
+            this.notifier.error(`No s'ha pogut generar l'Excel: ${error.message}`, error);
         }
     }
 
@@ -48,6 +58,8 @@ export class ExcelExportManager {
         try {
             const dadesExportació = await this.dataProvider.obtéDadesExportació();
             if (!dadesExportació) return;
+
+            this.notifier.avisaIncidències(dadesExportació.incidències, "Exportació a Excel");
 
             const maxAvaluacions = await this.dataProvider.obtéMaxAvaluacions();
             const workbook = this.workbookBuilder.construeixWorkbookTotesLesAvaluacions(dadesExportació.notesAlumnes, maxAvaluacions);
@@ -63,7 +75,7 @@ export class ExcelExportManager {
 
             this.logger.log('ExcelExportManager → XLSX de totes les avaluacions descarregat correctament');
         } catch (error) {
-            this.logger.error('Error crític a ExcelExportManager (Totes les avaluacions):', error);
+            this.notifier.error(`No s'ha pogut generar l'Excel de totes les avaluacions: ${error.message}`, error);
         }
     }
 
