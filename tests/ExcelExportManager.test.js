@@ -56,7 +56,7 @@ describe('ExcelExportManager', () => {
             error: jest.fn(),
             warn: jest.fn(),
             info: jest.fn(),
-            avisaIncidències: jest.fn(),
+            confirmaIncidències: jest.fn(() => true),
         };
         manager = new ExcelExportManager(
             new PowerToysLogger(false),
@@ -134,15 +134,71 @@ describe('ExcelExportManager', () => {
         expect(clickedDownload).toBeNull();
     });
 
-    test('hauria d’avisar de les incidències abans de descarregar', async () => {
+    test('hauria de demanar confirmació de les incidències abans de descarregar', async () => {
         const notesAlumnes = [{ idAlumne: '1', nom: 'Alumna', continguts: {} }];
         const incidències = [{ nom: 'Pau', motiu: 'error en la petició' }];
         dataProvider.obtéDadesExportació.mockResolvedValue({ notesAlumnes, nomGrup: 'Grup Test', incidències });
 
         await manager.procésDescàrregaExcel(1);
 
-        expect(notifier.avisaIncidències).toHaveBeenCalledWith(incidències, 'Exportació a Excel');
+        expect(notifier.confirmaIncidències).toHaveBeenCalledWith(incidències, 'Exportació a Excel');
         expect(clickedDownload).not.toBeNull();
+    });
+
+    test('hauria d’avortar la descàrrega si no es confirmen les incidències', async () => {
+        const incidències = [{ nom: 'Pau', motiu: 'error en la petició' }];
+        dataProvider.obtéDadesExportació.mockResolvedValue({
+            notesAlumnes: [{ idAlumne: '1', nom: 'Alumna', continguts: {} }],
+            nomGrup: 'Grup Test',
+            incidències,
+        });
+        notifier.confirmaIncidències.mockReturnValue(false);
+
+        await manager.procésDescàrregaExcel(1);
+
+        expect(workbookBuilder.construeixWorkbookNotes).not.toHaveBeenCalled();
+        expect(clickedDownload).toBeNull();
+    });
+
+    test('hauria d’avortar l’agregat si no es confirmen les incidències', async () => {
+        dataProvider.obtéDadesExportació.mockResolvedValue({
+            notesAlumnes: [{ idAlumne: '1', nom: 'Alumna', continguts: {} }],
+            nomGrup: 'Grup Test',
+            incidències: [{ nom: 'Pau', motiu: 'sense dades' }],
+        });
+        notifier.confirmaIncidències.mockReturnValue(false);
+
+        await manager.procésDescàrregaTotesLesAvaluacions();
+
+        expect(dataProvider.obtéMaxAvaluacions).not.toHaveBeenCalled();
+        expect(workbookBuilder.construeixWorkbookTotesLesAvaluacions).not.toHaveBeenCalled();
+    });
+
+    test('hauria d’aturar l’agregat quan no se sap el nombre d’avaluacions', async () => {
+        dataProvider.obtéDadesExportació.mockResolvedValue({
+            notesAlumnes: [{ idAlumne: '1', nom: 'Alumna', continguts: {} }],
+            nomGrup: 'Grup Test',
+            incidències: [],
+        });
+        dataProvider.obtéMaxAvaluacions.mockResolvedValue(null);
+
+        await manager.procésDescàrregaTotesLesAvaluacions();
+
+        expect(workbookBuilder.construeixWorkbookTotesLesAvaluacions).not.toHaveBeenCalled();
+        expect(clickedDownload).toBeNull();
+    });
+
+    test('hauria de passar el reporter de progrés al proveïdor de dades', async () => {
+        const informaProgrés = jest.fn();
+        dataProvider.obtéDadesExportació.mockResolvedValue({
+            notesAlumnes: [{ idAlumne: '1', nom: 'Alumna', continguts: {} }],
+            nomGrup: 'Grup Test',
+            incidències: [],
+        });
+
+        await manager.procésDescàrregaExcel(1, informaProgrés);
+
+        expect(dataProvider.obtéDadesExportació).toHaveBeenCalledWith(informaProgrés);
     });
 
     test('hauria de notificar l’error quan la generació del workbook peta', async () => {

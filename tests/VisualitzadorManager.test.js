@@ -53,7 +53,7 @@ describe('VisualitzadorManager', () => {
         };
         const modelBuilder = { construeixModel: jest.fn() };
         const modal = { open: jest.fn() };
-        const notifier = { error: jest.fn(), warn: jest.fn(), avisaIncidències: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), confirmaIncidències: jest.fn(() => true) };
         const manager = new VisualitzadorManager(
             { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
         );
@@ -64,7 +64,7 @@ describe('VisualitzadorManager', () => {
         expect(modelBuilder.construeixModel).not.toHaveBeenCalled();
     });
 
-    test('hauria d’avisar de les incidències en obrir el visualitzador', async () => {
+    test('hauria de demanar confirmació de les incidències en obrir el visualitzador', async () => {
         const notesAlumnes = [{ idAlumne: '1', nom: 'Alumna', continguts: {} }];
         const incidències = [{ nom: 'Anna', motiu: 'sense dades' }];
         const dataProvider = {
@@ -73,15 +73,54 @@ describe('VisualitzadorManager', () => {
         };
         const modelBuilder = { construeixModel: jest.fn(() => ({ students: [{ id: '1' }] })) };
         const modal = { open: jest.fn() };
-        const notifier = { error: jest.fn(), warn: jest.fn(), avisaIncidències: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), confirmaIncidències: jest.fn(() => true) };
         const manager = new VisualitzadorManager(
             { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
         );
 
         await manager.obreVisualitzador(2);
 
-        expect(notifier.avisaIncidències).toHaveBeenCalledWith(incidències, 'Visualitzador');
+        expect(notifier.confirmaIncidències).toHaveBeenCalledWith(incidències, 'Visualitzador');
         expect(modal.open).toHaveBeenCalled();
+    });
+
+    test('hauria d’avortar el visualitzador si no es confirmen les incidències', async () => {
+        const dataProvider = {
+            obtéDadesExportació: jest.fn().mockResolvedValue({
+                notesAlumnes: [{ idAlumne: '1', nom: 'Alumna', continguts: {} }],
+                incidències: [{ nom: 'Anna', motiu: 'sense dades' }],
+            }),
+            obtéMaxAvaluacions: jest.fn(),
+        };
+        const modelBuilder = { construeixModel: jest.fn() };
+        const modal = { open: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), confirmaIncidències: jest.fn(() => false) };
+        const manager = new VisualitzadorManager(
+            { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
+        );
+
+        await manager.obreVisualitzador(2);
+
+        expect(modelBuilder.construeixModel).not.toHaveBeenCalled();
+        expect(modal.open).not.toHaveBeenCalled();
+    });
+
+    test('hauria d’aturar l’agregat quan no se sap el nombre d’avaluacions', async () => {
+        const dataProvider = {
+            obtéDadesExportació: jest.fn().mockResolvedValue({ notesAlumnes: [], incidències: [] }),
+            obtéMaxAvaluacions: jest.fn().mockResolvedValue(null),
+        };
+        const modelBuilder = { construeixModel: jest.fn() };
+        const modal = { open: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), confirmaIncidències: jest.fn(() => true) };
+        const manager = new VisualitzadorManager(
+            { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
+        );
+
+        await manager.obreVisualitzador('agregat');
+
+        expect(modelBuilder.construeixModel).not.toHaveBeenCalled();
+        expect(modal.open).not.toHaveBeenCalled();
     });
 
     test('hauria de notificar l’error quan el modal peta', async () => {
@@ -91,7 +130,7 @@ describe('VisualitzadorManager', () => {
         };
         const modelBuilder = { construeixModel: jest.fn(() => ({ students: [] })) };
         const modal = { open: jest.fn(() => { throw new Error('modal trencat'); }) };
-        const notifier = { error: jest.fn(), warn: jest.fn(), avisaIncidències: jest.fn() };
+        const notifier = { error: jest.fn(), warn: jest.fn(), confirmaIncidències: jest.fn(() => true) };
         const manager = new VisualitzadorManager(
             { log: jest.fn(), error: jest.fn() }, dataProvider, modelBuilder, modal, undefined, notifier,
         );

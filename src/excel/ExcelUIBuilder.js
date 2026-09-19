@@ -1,4 +1,5 @@
 import { NotesAggregationHelper } from '../dataProviders/NotesAggregationHelper.js';
+import { BotóProgrés } from '../BotóProgrés.js';
 
 /**
  * Classe per a la creació i gestió del panell de descàrrega de notes en Excel.
@@ -17,7 +18,8 @@ export class ExcelUIBuilder {
         this.containerBuilder = containerBuilder;
         this.onVisualize = onVisualize;
         this.dataProvider = dataProvider;
-        this.maxAvaluacions = 4;
+        /** @type {number|null} Desconegut mentre sigui null: mai s'inventa. */
+        this.maxAvaluacions = null;
     }
 
     async updateMaxAvaluacions() {
@@ -45,6 +47,12 @@ export class ExcelUIBuilder {
 
         // Comprovem de nou després de l'espera per evitar duplicitats si l'observador s'ha disparat varies vegades
         if (table && table.previousElementSibling?.id === id) {
+            return null;
+        }
+
+        // Sense saber quantes avaluacions hi ha no es pot oferir el panell: el proveïdor ja ho ha notificat.
+        if (!(this.maxAvaluacions > 0)) {
+            this.logger.log('ExcelUIBuilder → panell no creat: nombre d’avaluacions desconegut');
             return null;
         }
 
@@ -92,24 +100,32 @@ export class ExcelUIBuilder {
         const btnExcel = container.querySelector('#btn-descargar-xlsx');
         const selectAvaluacio = container.querySelector('#powertoys-evaluation-select');
         if (btnExcel) {
+            const progrésDescàrrega = new BotóProgrés(
+                btnExcel,
+                () => this.obtéTextBotóDescarrega(selectAvaluacio?.value),
+            );
             btnExcel.addEventListener('click', () => {
                 const evaluation = this.obtéAvaluacioSeleccionada(selectAvaluacio);
-                this.onDownload(evaluation);
+                progrésDescàrrega.executa('Exportant...', (informaProgrés) => this.onDownload(evaluation, informaProgrés));
             });
         }
 
         const btnVisualitzar = container.querySelector('#btn-visualitzar-dades');
         if (selectAvaluacio && btnVisualitzar && btnExcel) {
             selectAvaluacio.addEventListener('change', () => {
-                btnExcel.textContent = this.obtéTextBotóDescarrega(selectAvaluacio.value);
-                btnVisualitzar.textContent = this.obtéTextBotóVisualitzador(selectAvaluacio.value);
+                if (!btnExcel.disabled) btnExcel.textContent = this.obtéTextBotóDescarrega(selectAvaluacio.value);
+                if (!btnVisualitzar.disabled) btnVisualitzar.textContent = this.obtéTextBotóVisualitzador(selectAvaluacio.value);
             });
         }
 
         if (btnVisualitzar && this.onVisualize) {
+            const progrésVisualització = new BotóProgrés(
+                btnVisualitzar,
+                () => this.obtéTextBotóVisualitzador(selectAvaluacio?.value),
+            );
             btnVisualitzar.addEventListener('click', () => {
                 const evaluation = this.obtéAvaluacioSeleccionada(selectAvaluacio);
-                this.onVisualize(evaluation);
+                progrésVisualització.executa('Carregant...', (informaProgrés) => this.onVisualize(evaluation, informaProgrés));
             });
         }
 

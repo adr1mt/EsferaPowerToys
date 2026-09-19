@@ -47,18 +47,36 @@ export class Notifier {
     }
 
     /**
-     * Avisa de les incidències d'una càrrega perquè no passin desapercebudes.
+     * Demana confirmació explícita abans de continuar amb dades incompletes.
+     *
+     * Sense confirmació l'operació s'atura: mai es generen dades parcials automàticament.
      * @param {Array<{nom: string, motiu: string}>} incidències
      * @param {string} context Descripció curta de l'operació afectada.
-     * @returns {HTMLElement|null}
+     * @returns {boolean} Cert si es pot continuar.
      */
-    avisaIncidències(incidències, context) {
-        if (!Array.isArray(incidències) || incidències.length === 0) return null;
+    confirmaIncidències(incidències, context) {
+        if (!Array.isArray(incidències) || incidències.length === 0) return true;
 
         const noms = incidències.map((incidència) => incidència.nom || '(sense nom)').join(', ');
-        return this.warn(
-            `${context}: no s'han pogut carregar ${incidències.length} alumnes (${noms}). Les dades són incompletes.`,
-        );
+        const resum = `${context}: no s'han pogut carregar ${incidències.length} alumnes (${noms}).`;
+
+        if (this.demanaConfirmació(`${resum}\n\nLes dades serien incompletes. Vols continuar igualment?`)) {
+            this.warn(`${resum} Has triat continuar amb dades incompletes.`);
+            return true;
+        }
+
+        this.error(`${resum} L'operació s'ha aturat per no generar dades incompletes.`);
+        return false;
+    }
+
+    /**
+     * Pregunta a la persona usuària. Aïllat per poder-lo substituir als tests.
+     * @param {string} missatge
+     * @returns {boolean}
+     */
+    demanaConfirmació(missatge) {
+        if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false;
+        return window.confirm(missatge);
     }
 
     /**

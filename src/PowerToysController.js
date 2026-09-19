@@ -98,9 +98,9 @@ export class PowerToysController {
         /** @type {ExcelUIBuilder} */
         const excelUIBuilder = new ExcelUIBuilder(
             this.logger,
-            (evaluation) => this.excelExportManager.procésDescàrregaExcel(evaluation),
+            (evaluation, informaProgrés) => this.excelExportManager.procésDescàrregaExcel(evaluation, informaProgrés),
             this.containerBuilder,
-            (evaluation) => this.visualitzadorManager.obreVisualitzador(evaluation),
+            (evaluation, informaProgrés) => this.visualitzadorManager.obreVisualitzador(evaluation, informaProgrés),
             notesDataProvider,
         );
 

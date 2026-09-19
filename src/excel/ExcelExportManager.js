@@ -27,21 +27,22 @@ export class ExcelExportManager {
     /**
      * Inicia i coordina el procés de descàrrega del fitxer Excel.
      * @param {number|typeof NotesAggregationHelper.MODE_AGREGAT} evaluation
+     * @param {(actual: number, total: number) => void} [informaProgrés]
      * @returns {Promise<void>}
      */
-    async procésDescàrregaExcel(evaluation = 1) {
+    async procésDescàrregaExcel(evaluation = 1, informaProgrés = undefined) {
         this.logger.log('ExcelExportManager → procésDescàrregaExcel inici');
 
         if (this.notesAggregationHelper.ésModeAgregació(evaluation)) {
-            await this.procésDescàrregaTotesLesAvaluacions();
+            await this.procésDescàrregaTotesLesAvaluacions(informaProgrés);
             return;
         }
 
         try {
-            const dadesExportació = await this.dataProvider.obtéDadesExportació();
+            const dadesExportació = await this.dataProvider.obtéDadesExportació(informaProgrés);
             if (!dadesExportació) return;
 
-            this.notifier.avisaIncidències(dadesExportació.incidències, "Exportació a Excel");
+            if (!this.notifier.confirmaIncidències(dadesExportació.incidències, "Exportació a Excel")) return;
 
             await this.descarregaXLSX(dadesExportació.notesAlumnes, evaluation, dadesExportació.nomGrup);
         } catch (error) {
@@ -51,17 +52,20 @@ export class ExcelExportManager {
 
     /**
      * Inicia i coordina el procés de descàrrega de totes les avaluacions en un únic fitxer.
+     * @param {(actual: number, total: number) => void} [informaProgrés]
      */
-    async procésDescàrregaTotesLesAvaluacions() {
+    async procésDescàrregaTotesLesAvaluacions(informaProgrés = undefined) {
         this.logger.log('ExcelExportManager → procésDescàrregaTotesLesAvaluacions inici');
 
         try {
-            const dadesExportació = await this.dataProvider.obtéDadesExportació();
+            const dadesExportació = await this.dataProvider.obtéDadesExportació(informaProgrés);
             if (!dadesExportació) return;
 
-            this.notifier.avisaIncidències(dadesExportació.incidències, "Exportació a Excel");
+            if (!this.notifier.confirmaIncidències(dadesExportació.incidències, "Exportació a Excel")) return;
 
             const maxAvaluacions = await this.dataProvider.obtéMaxAvaluacions();
+            if (!maxAvaluacions) return;
+
             const workbook = this.workbookBuilder.construeixWorkbookTotesLesAvaluacions(dadesExportació.notesAlumnes, maxAvaluacions);
 
             const buffer = await workbook.xlsx.writeBuffer();

@@ -24,18 +24,21 @@ export class VisualitzadorManager {
     /**
      * Carrega les dades directament d'Esfer@ i obre el modal.
      * @param {number|typeof NotesAggregationHelper.MODE_AGREGAT} evaluation
+     * @param {(actual: number, total: number) => void} [informaProgrés]
      */
-    async obreVisualitzador(evaluation = 1) {
+    async obreVisualitzador(evaluation = 1, informaProgrés = undefined) {
         this.logger.log('VisualitzadorManager → obreVisualitzador inici');
 
         try {
-            const dadesExportació = await this.dataProvider.obtéDadesExportació();
+            const dadesExportació = await this.dataProvider.obtéDadesExportació(informaProgrés);
             if (!dadesExportació) return;
 
-            this.notifier.avisaIncidències(dadesExportació.incidències, 'Visualitzador');
+            if (!this.notifier.confirmaIncidències(dadesExportació.incidències, 'Visualitzador')) return;
 
             const isAgregat = this.notesAggregationHelper.ésModeAgregació(evaluation);
             const maxAvaluacions = isAgregat ? await this.dataProvider.obtéMaxAvaluacions() : 0;
+            if (isAgregat && !maxAvaluacions) return;
+
             const model = this.modelBuilder.construeixModel(
                 dadesExportació.notesAlumnes,
                 evaluation,

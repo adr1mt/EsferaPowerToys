@@ -1,9 +1,6 @@
 import { NotesMapper } from './NotesMapper.js';
 import { Notifier } from '../Notifier.js';
 
-/** Nombre d'avaluacions que s'assumeix quan Esfer@ no el retorna. */
-const MAX_AVALUACIONS_PER_DEFECTE = 4;
-
 /**
  * Obté les dades de notes exposades pels serveis Angular d'Esfer@.
  */
@@ -21,9 +18,10 @@ export class NotesDataProvider {
 
     /**
      * Obté totes les dades necessàries per exportar o visualitzar les notes del grup actual.
-     * @returns {Promise<{notesAlumnes: Array<Object>, nomGrup: string}|null>}
+     * @param {(actual: number, total: number) => void} [informaProgrés] Rep quants alumnes s'han carregat.
+     * @returns {Promise<{notesAlumnes: Array<Object>, nomGrup: string, incidències: Array<Object>}|null>}
      */
-    async obtéDadesExportació() {
+    async obtéDadesExportació(informaProgrés = () => {}) {
         const idGrup = this.extractIdGrup();
         if (idGrup === null) {
             this.notifier.error(
@@ -49,7 +47,14 @@ export class NotesDataProvider {
             return null;
         }
 
-        const tasks = matricules.map((alumne, idx) => () => this.obtéDadesAlumne(factory, alumne, idx, matricules.length, idGrup));
+        const total = matricules.length;
+        informaProgrés(0, total);
+
+        const tasks = matricules.map((alumne, idx) => async () => {
+            const resultat = await this.obtéDadesAlumne(factory, alumne, idx, total, idGrup);
+            informaProgrés(idx + 1, total);
+            return resultat;
+        });
         const notesAlumnes = await this.executeQueue(tasks, {
             concurrency: 1,
             limit: Infinity,
@@ -86,16 +91,18 @@ export class NotesDataProvider {
 
     /**
      * Obté el número màxim d'avaluacions disponibles per a un grup i ho guarda en memòria cau.
-     * @returns {Promise<number>}
+     *
+     * Si no es pot determinar retorna `null`: no se n'inventa cap valor per defecte.
+     * @returns {Promise<number|null>}
      */
     async obtéMaxAvaluacions() {
         const idGrup = this.extractIdGrup();
-        if (!idGrup) return MAX_AVALUACIONS_PER_DEFECTE;
+        if (!idGrup) return this.avisaMaxAvaluacionsDesconegut();
 
         const isParcial = window.location.pathname.includes("parcialAvaluacioGrupAlumne");
         const type = isParcial ? 'parcial' : 'final';
         const cacheKey = `powertoys_max_avaluacions_${type}_${idGrup}`;
-        
+
         const cached = localStorage.getItem(cacheKey);
         const now = Date.now();
         const oneHour = 60 * 60 * 1000;
@@ -113,16 +120,16 @@ export class NotesDataProvider {
 
         try {
             const injector = this.obtéInjectorAngular();
-            if (!injector) return MAX_AVALUACIONS_PER_DEFECTE;
+            if (!injector) return this.avisaMaxAvaluacionsDesconegut();
 
             const factory = this.obtéAvaluacioFactory(injector);
 
             const matricules = await this.extractIdMatricula(factory, idGrup, injector);
-            if (!matricules || matricules.length === 0) return MAX_AVALUACIONS_PER_DEFECTE;
+            if (!matricules || matricules.length === 0) return this.avisaMaxAvaluacionsDesconegut();
 
             const primerAlumne = matricules[0];
             const data = await this.fetchAvaluacioData(factory, primerAlumne.idMatricula, idGrup);
-            
+
             if (data && data.lAvaluacions && Array.isArray(data.lAvaluacions)) {
                 const maxAvaluacions = data.lAvaluacions.length;
                 localStorage.setItem(cacheKey, JSON.stringify({ maxAvaluacions, timestamp: now }));
@@ -130,13 +137,21 @@ export class NotesDataProvider {
                 return maxAvaluacions;
             }
         } catch (error) {
-            this.notifier.warn(
-                `No s'ha pogut determinar el nombre d'avaluacions del grup; se'n mostren ${MAX_AVALUACIONS_PER_DEFECTE} per defecte.`,
-            );
             this.logger.error('NotesDataProvider → Error obtenint maxAvaluacions:', error);
         }
 
-        return MAX_AVALUACIONS_PER_DEFECTE;
+        return this.avisaMaxAvaluacionsDesconegut();
+    }
+
+    /**
+     * Comunica que el nombre d'avaluacions és desconegut i atura la funcionalitat.
+     * @returns {null}
+     */
+    avisaMaxAvaluacionsDesconegut() {
+        this.notifier.error(
+            "No s'ha pogut determinar el nombre d'avaluacions del grup. Recarrega la pàgina del grup a Esfer@ i torna-ho a provar.",
+        );
+        return null;
     }
 
     /**

@@ -73,22 +73,39 @@ describe('Notifier', () => {
         expect(document.querySelector('.powertoy-notice--error')).not.toBeNull();
     });
 
-    test('avisaIncidències informa del nombre i dels noms', () => {
-        notifier.avisaIncidències(
+    test('confirmaIncidències continua sense preguntar quan no hi ha incidències', () => {
+        const preguntat = jest.spyOn(notifier, 'demanaConfirmació');
+
+        expect(notifier.confirmaIncidències([], 'Exportació a Excel')).toBe(true);
+        expect(preguntat).not.toHaveBeenCalled();
+        expect(document.querySelector('.powertoy-notice')).toBeNull();
+    });
+
+    test('confirmaIncidències atura l’operació si no es confirma', () => {
+        jest.spyOn(notifier, 'demanaConfirmació').mockReturnValue(false);
+
+        const continua = notifier.confirmaIncidències(
             [{ nom: 'Anna', motiu: 'sense dades' }, { nom: 'Pau', motiu: 'error en la petició' }],
             'Exportació a Excel',
         );
 
-        const text = document.querySelector('.powertoy-notice--warn .powertoy-notice-text').textContent;
+        expect(continua).toBe(false);
+        const text = document.querySelector('.powertoy-notice--error .powertoy-notice-text').textContent;
         expect(text).toContain('2 alumnes');
         expect(text).toContain('Anna');
         expect(text).toContain('Pau');
-        expect(text).toContain('incompletes');
+        expect(text).toContain("s'ha aturat");
     });
 
-    test('avisaIncidències no mostra res quan no hi ha incidències', () => {
-        expect(notifier.avisaIncidències([], 'Exportació a Excel')).toBeNull();
-        expect(document.querySelector('.powertoy-notice')).toBeNull();
+    test('confirmaIncidències només continua amb una acció explícita', () => {
+        jest.spyOn(notifier, 'demanaConfirmació').mockReturnValue(true);
+
+        const continua = notifier.confirmaIncidències([{ nom: 'Anna', motiu: 'sense dades' }], 'Visualitzador');
+
+        expect(continua).toBe(true);
+        const text = document.querySelector('.powertoy-notice--warn .powertoy-notice-text').textContent;
+        expect(text).toContain('Anna');
+        expect(text).toContain('incompletes');
     });
 
     test('neteja treu tots els missatges', () => {
