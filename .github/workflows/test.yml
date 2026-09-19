@@ -1,7 +1,9 @@
-name: Run tests and verify build on PR
+name: Run tests and verify build
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 jobs:
   test:
@@ -52,3 +54,9 @@ jobs:
 
     - name: Run build
       run: pnpm run build
+
+    # El dist/ es commiteja a mà i la URL d'instal·lació apunta a main/dist.
+    # Si el build genera res diferent del que hi ha al repo, el dist publicat
+    # no correspon al src i cal aturar-ho aquí.
+    - name: Verify dist matches src
+      run: git diff --exit-code -- dist/
